@@ -4,6 +4,7 @@ from bika.lims import api
 from bika.lims.interfaces import IAnalysis
 from DateTime import DateTime
 from senaite.core.api import dtime
+from senaite.core.api import workflow as wapi
 from senaite.fhir import api as fapi
 from senaite.fhir.config import OBSERVATION_STATUSES
 from senaite.fhir.config import SYSTEM_CODES
@@ -49,11 +50,19 @@ class AnalysisToObservation(object):
         if performer:
             data["performer"] = performer
 
+        note = self.get_note()
+        if note:
+            data["note"] = note
+
         data.update(self.get_value())
 
         ref_range = self.get_reference_range()
         if ref_range:
             data["referenceRange"] = ref_range
+
+        device = self.get_device()
+        if device:
+            data["device"] = device
 
         return ObservationResource(data)
 
@@ -164,6 +173,20 @@ class AnalysisToObservation(object):
         }
         return {"valueQuantity": value_quantity}
 
+    def get_note(self):
+        remarks = api.safe_unicode(self.analysis.getRemarks())
+        if not remarks:
+            return []
+        return [{"text": remarks}]
+
+    def get_device(self):
+        instrument = self.analysis.getInstrument()
+        if not instrument:
+            return None
+        return {
+            "reference": "Device/{}".format(fapi.get_fhir_id(instrument)),
+        }
+
     def get_reference_range(self):
         rng = self.analysis.getResultsRange()
         if not rng:
@@ -217,6 +240,7 @@ class ResourceToAnalysisResult(object):
         self.validate_code(analysis)
         self.validate_device(analysis)
         value = self.get_value(analysis)
+        self.validate_submittable(analysis, value)
 
         return {
             "Result": value,
@@ -247,6 +271,22 @@ class ResourceToAnalysisResult(object):
                 code="not-found",
             )
         return analysis
+
+    def validate_submittable(self, analysis, value):
+        """The Analysis must still accept a submitted result
+
+        Once an Analysis has already been submitted, "submit" is no longer
+        a valid workflow transition and its result can no longer be overwritten
+        through this endpoint.
+        """
+        analysis.setResult(value)
+        if not wapi.is_transition_allowed(analysis, "submit"):
+            raise ObservationValidationError(
+                "The Analysis result has already been submitted and can no "
+                "longer be updated",
+                expression=["Observation.value[x]"],
+                code="conflict",
+            )
 
     def validate_status(self):
         if self.resource.status != "final":

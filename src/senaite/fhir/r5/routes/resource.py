@@ -118,10 +118,11 @@ def post(context, request, resource_type=None):
                 status = "201 Updated"
         except (ServiceRequestValidationError, ObservationValidationError) as e:  # noqa: E501
             transaction.abort()
-            request.response.setStatus(400)
+            code = getattr(e, "code", "business-rule")
+            request.response.setStatus(403 if code == "conflict" else 400)
             issue = {
                 "severity": "error",
-                "code": getattr(e, "code", "business-rule"),
+                "code": code,
                 "details": {"text": str(e)},
                 "expression": e.expression,
             }
@@ -164,6 +165,8 @@ def post(context, request, resource_type=None):
         # applied (see ResourceToAnalysisResult), submit it
         if resource.resourceType == "Observation" and obj:
             do_action_for(obj, "submit")
+            obs = fapi.to_fhir_resource(obj, default=None)
+            return obs
 
     # create the BundleResponse
     resp = {
