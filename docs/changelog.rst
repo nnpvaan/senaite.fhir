@@ -4,6 +4,8 @@ Changelog
 1.0.0 (Unreleased)
 ------------------
 
+- #27 Add GET /Task endpoint for instrument worksheet worklists
+- #26 Implement GET /Task/{id} endpoint for FHIR SenaiteWorksheetTask resources
 - #23 Add Ready and In Progress states for worksheets
 - #19 Add POST /Observation support to submit Analysis results
 - #17 Add ServiceRequest endpoints for SenaiteInstrumentServiceRequest resource
