@@ -40,6 +40,7 @@ class WorksheetToTask(object):
             "id": str(fapi.get_uuid(uid)),
             "meta": {
                 "profile": [to_fhir_profile_url("SenaiteWorksheetTask")],
+                "versionId": str(api.get_version(self.worksheet)),
                 "lastUpdated": to_fhir_datetime(
                     api.get_modification_date(self.worksheet)),
             },

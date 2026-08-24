@@ -11,6 +11,7 @@ from senaite.fhir import api as fapi
 from senaite.fhir.api import find_object_for
 from senaite.fhir.config import DEFAULT_BUNDLE_PAGE_COUNT
 from senaite.fhir.config import INSTRUMENT_SERVICE_REQUEST_STATUSES
+from senaite.fhir.config import WORKSHEET_TASK_STATUSES
 from senaite.fhir.converter import to_fhir_profile_url
 from senaite.fhir.finder.sampletype import SampleTypeFinder
 from senaite.fhir.interfaces import IBundleResource
@@ -30,6 +31,7 @@ ENDPOINT = "senaite.fhir.r5"
 ENDPOINT_GET = "%s.get" % ENDPOINT
 ENDPOINT_POST = "%s.post" % ENDPOINT
 ENDPOINT_REVOKE = "%s.revoke" % ENDPOINT
+ENDPOINT_PATCH = "%s.patch" % ENDPOINT
 
 RESOURCE_TYPE_TO_CONTENT = (
     ("ServiceRequest", IAnalysisRequest),
@@ -189,6 +191,131 @@ def post(context, request, resource_type=None):
         "entry": entries,
     }
     return BundleResponseResource(resp)
+
+
+@add_route("/<string:resource_type>/<string(length=32):uid>", ENDPOINT_PATCH,
+           methods=["PATCH"])
+@add_route("/<string:resource_type>/<string(length=36):uid>", ENDPOINT_PATCH,
+           methods=["PATCH"])
+def patch(context, request, resource_type, uid):
+    """Apply a constrained JSON Patch to a FHIR resource
+
+    Only Task is currently supported. Its only permitted operation maps an
+    eligible worksheet to the ``in_progress`` workflow transition
+    """
+    req.disable_csrf_protection()
+
+    # maybe we received a request by uid/uuid
+    uuids = list(filter(lambda val: fapi.is_uuid(val), [uid, resource_type]))
+    if uuids:
+        uid = fapi.get_uuid(uuids[0]).hex
+        # Pass the resource type so to_fhir_resource can fall back to a
+        # fhir_<resource_type>_id search when the SENAITE UID lookup misses.
+        fhir_type = resource_type if not fapi.is_uuid(resource_type) else None
+        resource = fapi.to_fhir_resource(
+            uid, resource_type=fhir_type, default=None
+        )
+        if resource:
+            if resource_type == "Task":
+                return update_task(request, resource)
+
+            fapi.fail("Not Found", status=404)
+
+    fapi.fail("Not Found", status=404)
+
+
+def update_task(request, resource):
+    """Apply the one supported client-initiated Task transition
+    """
+    task_id = resource.id
+
+    worksheet = fapi.get_object_by_fhir_uid(
+        task_id, portal_type="Worksheet", default=None
+    )
+
+    if not worksheet:
+        fapi.fail("Not Found", status=404)
+
+    review_state = api.get_review_status(worksheet)
+    task_status = dict(WORKSHEET_TASK_STATUSES).get(
+        review_state, review_state
+    )
+    transition_issue = {
+        "severity": "error",
+        "code": "business-rule",
+        "diagnostics": (
+            "Task/{} is in status '{}'. Only ready -> in-progress or "
+            "draft -> in-progress are permitted client-initiated "
+            "transitions.".format(task_id, task_status)),
+    }
+
+    # If-Match is mandatory because this endpoint is used by a local
+    # middleware that must not overwrite an intervening worksheet change
+    if_match = request.getHeader("If-Match")
+    current_version = str(api.get_version(worksheet))
+    if not has_matching_version(if_match, current_version):
+        request.response.setStatus(412)
+        issue = {
+            "severity": "error",
+            "code": "business-rule",
+            "diagnostics": (
+                "Task/{} has version '{}'. The supplied version header "
+                "does not match.".format(task_id, current_version)),
+        }
+        return OperationOutcome({"issue": [issue]})
+
+    if review_state not in ("open", "ready"):
+        request.response.setStatus(409)
+        return OperationOutcome({"issue": [transition_issue]})
+
+    patch = req.get_request_data()
+    if not is_in_progress_patch(patch):
+        request.response.setStatus(400)
+        issue = {
+            "severity": "error",
+            "code": "invalid",
+            "diagnostics": (
+                "Only a replace operation setting /status to in-progress "
+                "is supported."),
+        }
+        return OperationOutcome({"issue": [issue]})
+
+    success, message = do_action_for(worksheet, "in_progress")
+    if not success:
+        transaction.abort()
+        request.response.setStatus(409)
+        return OperationOutcome({"issue": [transition_issue]})
+
+    task = fapi.to_fhir_resource(
+        worksheet, resource_type="Task", default=None
+    )
+
+    if not task:
+        # Do not commit a transition that cannot be represented to the caller
+        transaction.abort()
+        fapi.fail("Not Found", status=404)
+
+    request.response.setHeader(
+        "ETag", 'W/"{}"'.format(task["meta"]["versionId"])
+    )
+
+    return task
+
+
+def has_matching_version(value, version):
+    """Return whether ``value`` is the required weak ETag for ``version``
+    """
+    return value == 'W/"{}"'.format(version)
+
+
+def is_in_progress_patch(patch):
+    """Validate the single supported JSON Patch document
+    """
+    return patch == [{
+        "op": "replace",
+        "path": "/status",
+        "value": "in-progress",
+    }]
 
 
 def process_bundle_specimen(sr_resource, ar_obj, ar_status, ar_modified):
