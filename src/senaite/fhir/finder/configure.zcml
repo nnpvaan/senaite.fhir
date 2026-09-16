@@ -8,6 +8,10 @@
   <adapter for="senaite.fhir.interfaces.IPatientResource"
            factory=".patient.PatientFinder"/>
 
+  <!-- Find a Contact object given a FHIR Practitioner resource -->
+  <adapter for="senaite.fhir.interfaces.IPractitionerResource"
+           factory=".contact.ContactFinder"/>
+
   <!-- Find a SampleType object given a FHIR Specimen resource -->
   <adapter for="senaite.fhir.interfaces.ISpecimenResource"
            factory=".sampletype.SampleTypeFinder"/>
