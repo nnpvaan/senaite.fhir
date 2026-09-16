@@ -3,10 +3,12 @@ from bika.lims.interfaces import IAnalysisRequest
 from senaite.fhir.config import DEFAULT_REPORT_PROFILE_CODE
 from senaite.fhir.config import SECONDARY_RESOURCES_KEY
 from senaite.fhir.converter import first_by
+from senaite.fhir.converter import reject_internal_identifier
 from senaite.fhir.converter import to_fhir_datetime
 from senaite.fhir.converter import to_fhir_profile_url
 from senaite.fhir.converter import to_fhir_identifier as to_fhir_id
 from senaite.fhir.converter import to_naming_system_url
+from senaite.fhir.converter import validate_external_identifier
 from senaite.fhir.exceptions import ServiceRequestValidationError
 from senaite.fhir.interfaces import IContentActionToFHIR
 from senaite.fhir.interfaces import IContentToFHIR
@@ -19,7 +21,6 @@ from zope.component import adapter
 from zope.interface import implementer
 from bika.lims import api
 from senaite.core.catalog import SETUP_CATALOG
-from senaite.core.catalog import CONTACT_CATALOG
 from senaite.fhir import api as fapi
 from plone.memoize.instance import memoize
 
@@ -150,54 +151,15 @@ class ResourceToAnalysisRequest(object):
         """
         self.validate_identifiers()
 
-    def _reject_object_identifier(self, obj, obj_name):
-        """Reject resource that mandates internal identifier"""
-        object_id = obj.get_object_id()
-        if object_id:
-            msg = (
-                "Cannot specify usual identifier externally in incoming "
-                "{}:{}"
-            ).format(obj_name, object_id.value)
-            raise ServiceRequestValidationError(
-                msg,
-                expression=["{}.identifier".format(obj_name)],
-                code="invalid",
-            )
-
-    def _validate_external_identifier(self, obj, obj_name,
-                                      valid_system=None):
-        """Reject resource with invalid external identifier"""
-        external_id = obj.get_external_id()
-        if external_id:
-            if valid_system is None:
-                msg = (
-                    "Cannot specify external identifier in "
-                    "{}:{}"
-                ).format(obj_name, external_id.value)
-                raise ServiceRequestValidationError(
-                    msg,
-                    expression=["{}.identifier".format(obj_name)],
-                    code="invalid",
-                )
-            if external_id.system != valid_system:
-                msg = (
-                    "Unsupported identifier system in {}: {}"
-                ).format(obj_name, external_id.system)
-                raise ServiceRequestValidationError(
-                    msg,
-                    expression=["{}.identifier".format(obj_name)],
-                    code="invalid",
-                )
-
     def validate_identifiers(self):
         """Validates identifiers"""
-        self._reject_object_identifier(self.resource, "ServiceRequest")
-        self._validate_external_identifier(self.resource, "ServiceRequest")
+        reject_internal_identifier(self.resource, "ServiceRequest")
+        validate_external_identifier(self.resource, "ServiceRequest")
 
         specimen = self.get_specimen()
         if specimen:
-            self._reject_object_identifier(specimen, "Specimen")
-            self._validate_external_identifier(
+            reject_internal_identifier(specimen, "Specimen")
+            validate_external_identifier(
                 specimen,
                 "Specimen",
                 to_naming_system_url("client-sample-id"),
@@ -331,33 +293,9 @@ class ResourceToAnalysisRequest(object):
         if not sibling:
             raise ValueError("%r: No Client for %s" % (self.resource, uid))
 
-        # TODO Consider to add a search function in fapi and use adapters
-        # search by practitioner ID (use=secondary)
-        contact_id = sibling.get_external_id()
-        if contact_id:
-            # TODO New field External ID in contact to search by
-            query = dict(portal_type="Contact", getExternalID=contact_id)
-            # brains = api.search(query, CONTACT_CATALOG)
-            brains = []
-            if len(brains) == 1:
-                return api.get_object(brains[0])
-
-        # fallback to search by fullname (from the client)
-        client = self.get_client()
-        fullname = sibling.get_fullname()
-        if client and fullname:
-            fullname = sibling.get_fullname()
-            query = {
-                "portal_type": "Contact",
-                "getFullname": fullname,
-                "path": {
-                    "query": "/".join(client.getPhysicalPath()),
-                    "level": 0
-                }
-            }
-            brains = api.search(query, CONTACT_CATALOG)
-            if len(brains) == 1:
-                return api.get_object(brains[0])
+        obj = fapi.find_object_for(sibling, default=None)
+        if obj:
+            return obj
 
         raise ValueError("%r: No Contact for %s" % (self.resource, uid))
 
