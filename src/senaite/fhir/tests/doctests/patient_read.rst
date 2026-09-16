@@ -192,7 +192,11 @@ preserved against the object as a distinct FHIR id:
     ...     "name": [{"use": "official", "family": "Stone", "given": ["Mark"]}],
     ...     "gender": "male",
     ...     "birthDate": "1970-02-03",
-    ...     "identifier": [{"use": "secondary", "value": "PAT-FHIR"}],
+    ...     "identifier": [{
+    ...         "use": "secondary",
+    ...         "system": "https://fhir.senaite.org/NamingSystem/patient-mrn",
+    ...         "value": "PAT-FHIR",
+    ...     }],
     ... })
     >>> created = fapi.create(incoming)
     >>> transaction.commit()
