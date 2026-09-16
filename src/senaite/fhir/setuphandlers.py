@@ -15,7 +15,7 @@ CATALOGS = (
 
 # Tuples of (catalog, index_name, index_attribute, index_type)
 INDEXES = [
-    (CONTACT_CATALOG, "getExternalID", "", "FieldIndex"),
+    (CONTACT_CATALOG, "contact_external_id", "", "FieldIndex"),
 ]
 
 # Tuples of (catalog, column_name)

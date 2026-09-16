@@ -32,23 +32,23 @@ class ExtendedContact(object):
         self.context = context
 
     @security.protected(permissions.View)
-    def getExternalId(self):
+    def getExternalID(self):
         accessor = self.context.accessor("external_id")
         return accessor(self.context)
 
     @security.protected(permissions.ModifyPortalContent)
-    def setExternalId(self, value):
+    def setExternalID(self, value):
         mutator = self.context.mutator("external_id")
         mutator(self.context, value)
 
-    external_id = property(getExternalId, setExternalId)
+    external_id = property(getExternalID, setExternalID)
 
 
-def getExternalId(self):
+def getExternalID(self):
     behavior = IExtendedContactBehavior(self)
-    return behavior.getExternalId()
+    return behavior.getExternalID()
 
 
-def setExternalId(self, value):
+def setExternalID(self, value):
     behavior = IExtendedContactBehavior(self)
-    behavior.setExternalId(value)
+    behavior.setExternalID(value)
