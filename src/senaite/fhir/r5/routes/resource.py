@@ -232,8 +232,12 @@ def process_bundle_specimen(sr_resource, ar_obj, ar_status, ar_modified):
             ar_obj.setSampleType(sample_type)
             ar_obj.reindexObject()
 
+        rendered_specimen = fapi.get_fhir_resource(
+            ar_obj, resource_type="Specimen", default=None
+        )
         entries.append({
             "fullUrl": "Specimen/{}".format(specimen.id),
+            "resource": dict(rendered_specimen),
             "response": {
                 "status": ar_status,
                 "lastModified": ar_modified,

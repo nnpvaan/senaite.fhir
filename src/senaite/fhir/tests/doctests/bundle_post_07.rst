@@ -141,6 +141,14 @@ status):
     >>> specimen_entries[0]["response"]["status"]
     u'201 Created'
 
+The response embeds the rendered Specimen resource:
+
+    >>> response_specimen = specimen_entries[0]["resource"]
+    >>> response_specimen["resourceType"]
+    u'Specimen'
+    >>> response_specimen["type"]["coding"][0]["display"]
+    u'Serum specimen'
+
 The FHIR id of the stored Specimen is the one carried by the bundle:
 
     >>> bundle_specimen = [e["resource"] for e in bundle["entry"]
@@ -175,6 +183,8 @@ Fetching the Specimen by its FHIR id also works:
     >>> single["resourceType"]
     u'Specimen'
     >>> single["id"] == stored_fhir_id
+    True
+    >>> single == response_specimen
     True
 
 
