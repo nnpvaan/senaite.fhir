@@ -4,6 +4,7 @@ Changelog
 1.0.0 (Unreleased)
 ------------------
 
+- #41 Embed rendered Specimen resource in bundle response
 - #39 Fix FHIR Patient subject references in included bundles
 - #38 Unify the handling of _include across search endpoints
 - #32 Add support for _include=Specimen:specimen in ServiceRequest bundle
