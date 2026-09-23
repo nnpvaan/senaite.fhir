@@ -259,6 +259,34 @@ The AnalysisRequest is created with the correct ClientSampleID:
     >>> sample.getClientSampleID()
     'EXT-CARDIAC-003'
 
+The response Specimen also carries SENAITE's newly assigned sample ID as its
+``usual`` identifier, ahead of the external client-sample ID:
+
+    >>> response_specimen = [entry["resource"] for entry in response["entry"]
+    ...                      if entry.get("resource", {}).get("resourceType")
+    ...                      == "Specimen"][0]
+    >>> response_specimen["identifier"][0]["value"] == sample.getId()
+    True
+    >>> response_specimen["identifier"][0]["use"]
+    u'usual'
+    >>> response_specimen["identifier"][0]["system"] == (
+    ...     "https://fhir.senaite.org/NamingSystem/sample-id")
+    True
+    >>> response_specimen["identifier"][1]["value"]
+    u'EXT-CARDIAC-003'
+    >>> response_specimen["identifier"][1]["use"]
+    u'secondary'
+
+The annotation-backed resource returned later keeps that internal identifier:
+
+    >>> browser.open("{}/Specimen/{}".format(
+    ...     fhir_url, response_specimen["id"]))
+    >>> stored_specimen = json.loads(browser.contents)
+    >>> stored_specimen["identifier"][0]["value"] == sample.getId()
+    True
+    >>> stored_specimen["identifier"][0]["use"]
+    u'usual'
+
 
 Success: no identifiers
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -290,4 +318,3 @@ The AnalysisRequest is created without a ClientSampleID:
     1
     >>> new_sample = [s for s in samples if not s.getClientSampleID()][0]
     >>> new_sample.getClientSampleID()
-
