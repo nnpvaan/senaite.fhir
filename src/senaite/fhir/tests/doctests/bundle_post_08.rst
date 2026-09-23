@@ -259,33 +259,26 @@ The AnalysisRequest is created with the correct ClientSampleID:
     >>> sample.getClientSampleID()
     'EXT-CARDIAC-003'
 
-The response Specimen also carries SENAITE's newly assigned sample ID as its
-``usual`` identifier, ahead of the external client-sample ID:
+The transaction-response records the newly created Specimen by its FHIR id.
+Its annotation-backed resource carries SENAITE's newly assigned sample ID as
+the ``usual`` identifier, ahead of the external client-sample ID:
 
-    >>> response_specimen = [entry["resource"] for entry in response["entry"]
-    ...                      if entry.get("resource", {}).get("resourceType")
-    ...                      == "Specimen"][0]
-    >>> response_specimen["identifier"][0]["value"] == sample.getId()
-    True
-    >>> response_specimen["identifier"][0]["use"]
-    u'usual'
-    >>> response_specimen["identifier"][0]["system"] == (
-    ...     "https://fhir.senaite.org/NamingSystem/sample-id")
-    True
-    >>> response_specimen["identifier"][1]["value"]
-    u'EXT-CARDIAC-003'
-    >>> response_specimen["identifier"][1]["use"]
-    u'secondary'
-
-The annotation-backed resource returned later keeps that internal identifier:
-
-    >>> browser.open("{}/Specimen/{}".format(
-    ...     fhir_url, response_specimen["id"]))
+    >>> response_specimen = [entry for entry in response["entry"]
+    ...                      if entry["fullUrl"].startswith("Specimen/")][0]
+    >>> specimen_id = response_specimen["fullUrl"].rsplit("/", 1)[1]
+    >>> browser.open("{}/Specimen/{}".format(fhir_url, specimen_id))
     >>> stored_specimen = json.loads(browser.contents)
     >>> stored_specimen["identifier"][0]["value"] == sample.getId()
     True
     >>> stored_specimen["identifier"][0]["use"]
     u'usual'
+    >>> stored_specimen["identifier"][0]["system"] == (
+    ...     "https://fhir.senaite.org/NamingSystem/sample-id")
+    True
+    >>> stored_specimen["identifier"][1]["value"]
+    u'EXT-CARDIAC-003'
+    >>> stored_specimen["identifier"][1]["use"]
+    u'secondary'
 
 
 Success: no identifiers
