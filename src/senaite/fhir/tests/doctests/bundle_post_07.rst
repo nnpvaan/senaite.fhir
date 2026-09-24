@@ -149,6 +149,30 @@ The response embeds the rendered Specimen resource:
     >>> response_specimen["type"]["coding"][0]["display"]
     u'Serum specimen'
 
+The consumer's content is kept as submitted, e.g. the SNOMED code of the
+type and the note:
+
+    >>> response_specimen["type"]["coding"][0]["code"]
+    u'119364003'
+    >>> response_specimen["note"][0]["text"]
+    u'Fasting specimen. No visible haemolysis.'
+
+But the elements owned by SENAITE are populated by the server. The internal
+Sample ID, that the consumer cannot supply, is returned alongside the Client
+Sample ID it did supply:
+
+    >>> identifiers = response_specimen["identifier"]
+    >>> [(i["use"], i["system"].split("/")[-1]) for i in identifiers]
+    [(u'usual', u'sample-id'), (u'secondary', u'client-sample-id')]
+    >>> portal._p_jar.sync()
+    >>> identifiers[0]["value"] == client.objectValues()[0].getId()
+    True
+    >>> identifiers[1]["value"]
+    u'EXT-LIVER-001'
+
+    >>> response_specimen["status"]
+    u'available'
+
 The FHIR id of the stored Specimen is the one carried by the bundle:
 
     >>> bundle_specimen = [e["resource"] for e in bundle["entry"]
@@ -213,6 +237,17 @@ Re-post the modified bundle:
     ...             if e["fullUrl"].startswith("ServiceRequest/")][0]
     >>> sr_entry["response"]["status"]
     u'200 OK'
+
+The embedded Specimen reflects the update, and still carries the internal
+Sample ID:
+
+    >>> specimen_entry2 = [e for e in entries2
+    ...                    if e["fullUrl"].startswith("Specimen/")][0]
+    >>> specimen2 = specimen_entry2["resource"]
+    >>> specimen2["type"]["coding"][0]["display"]
+    u'EDTA Blood'
+    >>> specimen2["identifier"] == response_specimen["identifier"]
+    True
 
 No duplicate AnalysisRequest is created:
 
