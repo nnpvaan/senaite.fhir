@@ -182,6 +182,10 @@ def post(context, request, resource_type=None):
         if resource.resourceType == "Observation" and obj:
             do_action_for(obj, "submit")
             obs = fapi.to_fhir_resource(obj, default=None)
+            # Reference ranges are SENAITE-owned metadata. They are returned
+            # to result consumers in the DiagnosticReport workflow, never in
+            # the instrument/middleware result-submission exchange
+            obs.pop("referenceRange", None)
             if resource.text:
                 obs["text"] = resource.text
             return obs
@@ -241,8 +245,14 @@ def process_bundle_specimen(sr_resource, ar_obj, ar_status, ar_modified):
             ar_obj.setSampleType(sample_type)
             ar_obj.reindexObject()
 
+        # The IG requires the Specimen entry, and only it, to carry the full
+        # server-populated resource: that is how the consumer learns the
+        # internal Sample ID. Fail rather than return an entry without it
+        rendered_specimen = fapi.get_fhir_resource(
+            ar_obj, resource_type="Specimen")
         entries.append({
             "fullUrl": "Specimen/{}".format(specimen.id),
+            "resource": dict(rendered_specimen),
             "response": {
                 "status": ar_status,
                 "lastModified": ar_modified,
