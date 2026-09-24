@@ -14,7 +14,6 @@ from senaite.fhir.config import DEFAULT_BUNDLE_PAGE_COUNT
 from senaite.fhir.config import INCLUDE_REFERENCE_FIELDS
 from senaite.fhir.config import INSTRUMENT_SERVICE_REQUEST_STATUSES
 from senaite.fhir.converter import to_fhir_datetime
-from senaite.fhir.converter import to_fhir_identifier
 from senaite.fhir.converter import to_fhir_profile_url
 from senaite.fhir.finder.sampletype import SampleTypeFinder
 from senaite.fhir.interfaces import IBundleResource
@@ -227,14 +226,6 @@ def process_bundle_specimen(sr_resource, ar_obj, ar_status, ar_modified):
         specimen = bundle.first_entry("id", str(spec_ref.UUID()))
         if not specimen:
             continue
-
-        # SENAITE assigns the AnalysisRequest's internal sample ID after the
-        # bundle has been validated. Add it before saving the annotation-backed
-        # Specimen, while preserving any client-supplied identifier.
-        identifiers = specimen.get("identifier") or []
-        specimen["identifier"] = [
-            to_fhir_identifier("sample-id", ar_obj.getId(), use="usual"),
-        ] + identifiers
 
         # Persist the Specimen dict in the AR's annotation storage and index
         # its UID in the FHIR catalog so search_by_fhir_uid can find the AR.

@@ -260,8 +260,10 @@ The AnalysisRequest is created with the correct ClientSampleID:
     'EXT-CARDIAC-003'
 
 The transaction-response records the newly created Specimen by its FHIR id.
-Its annotation-backed resource carries SENAITE's newly assigned sample ID as
-the ``usual`` identifier, ahead of the external client-sample ID:
+When read, it carries SENAITE's newly assigned sample ID as the ``usual``
+identifier, ahead of the external client-sample ID. The consumer cannot supply
+the former, so it is resolved from the live sample rather than from the stored
+snapshot (see ``get_server_owned_elements``):
 
     >>> response_specimen = [entry for entry in response["entry"]
     ...                      if entry["fullUrl"].startswith("Specimen/")][0]
