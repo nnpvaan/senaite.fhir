@@ -109,6 +109,25 @@ OBSERVATION_STATUSES = (
     (None, "registered")
 )
 
+SPECIMEN_STATUSES = (
+    # mapping between Sample status and Specimen's FHIR statuses
+    # FHIR ValueSet: available | unavailable | unsatisfactory |
+    #                entered-in-error
+    # https://hl7.org/fhir/R5/valueset-specimen-status.html
+    ("invalid", "entered-in-error"),
+    ("rejected", "unsatisfactory"),
+    ("cancelled", "unavailable"),
+    # Default status if no match
+    (None, "available"),
+)
+
+# Elements of a secondary FHIR resource that are owned by SENAITE. The stored
+# snapshot keeps what the consumer submitted, but these elements are always
+# taken from the live content when the resource is read
+SERVER_OWNED_ELEMENTS = (
+    ("Specimen", ("identifier", "status")),
+)
+
 ANALYSIS_REPORTABLE_STATUSES = (
     # Analyses that are in this status will be reported as Observations
     "to_be_verified",
