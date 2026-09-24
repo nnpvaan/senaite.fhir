@@ -134,6 +134,7 @@ Successful result submission
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     >>> analysis = new_analysis()
+    >>> analysis.setResultsRange({"min": "135", "max": "145"})
     >>> api.get_workflow_status_of(analysis)
     'unassigned'
 
@@ -168,6 +169,13 @@ The response Observation carries the same value back:
 
     >>> resource["valueQuantity"]["value"]
     u'140'
+
+Configured reference ranges remain SENAITE-owned metadata for the later
+Request/Results workflow; they are never returned in the instrument result
+submission exchange:
+
+    >>> "referenceRange" in resource
+    False
 
 
 Validation: Observation.status must be 'final'

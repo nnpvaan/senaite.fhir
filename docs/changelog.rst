@@ -4,6 +4,7 @@ Changelog
 1.0.0 (Unreleased)
 ------------------
 
+- #42 Add SENAITE-owned reference ranges to FHIR result Observations
 - #39 Fix FHIR Patient subject references in included bundles
 - #38 Unify the handling of _include across search endpoints
 - #32 Add support for _include=Specimen:specimen in ServiceRequest bundle
