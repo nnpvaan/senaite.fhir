@@ -901,10 +901,11 @@ def get_server_owned_elements(obj, resource_type):
     These are the elements a consumer cannot supply (e.g. the internal
     Sample ID of a Specimen) or that SENAITE keeps up to date afterwards (e.g.
     the Specimen status), so they must never be served from the snapshot
-    stored by ``link_fhir_resource``.
+    stored by `link_fhir_resource`. Which elements are owned by SENAITE for
+    each resource type is defined in `SERVER_OWNED_ELEMENTS`.
 
     :param obj: the content object the resource is linked to
-    :param resource_type: FHIR resource type, e.g. ``"Specimen"``
+    :param resource_type: FHIR resource type, e.g. `"Specimen"`
     :returns: dict of element name to value, empty if none
     """
     keys = dict(SERVER_OWNED_ELEMENTS).get(resource_type)
@@ -924,7 +925,9 @@ def get_fhir_resource(obj, resource_type=None, default=_marker):
     Secondary resources -- those without a counterpart content type in SENAITE,
     e.g. the ``Specimen`` of an AnalysisRequest -- are served from the snapshot
     that ``link_fhir_resource`` keeps in the object's annotation storage, as
-    there is no live content to rebuild them from.
+    there is no live content to rebuild them from. The elements owned by
+    SENAITE (see `get_server_owned_elements`) are the exception: they are
+    always taken from the live content, overriding the snapshot.
 
     Any other resource type is synthesized from live content through its
     ``IContentToFHIR`` adapter (see ``to_fhir_resource``), so it always

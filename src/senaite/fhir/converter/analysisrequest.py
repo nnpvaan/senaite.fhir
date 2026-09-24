@@ -140,6 +140,14 @@ class AnalysisRequestToSpecimen(object):
         return SpecimenResource(data)
 
     def get_status(self):
+        """Returns the FHIR Specimen status that maps to the current status
+        of the Sample, as defined in `SPECIMEN_STATUSES`
+
+        Falls back to the default status (the one keyed as `None`) when the
+        status of the Sample has no explicit mapping
+
+        :returns: available | unavailable | unsatisfactory | entered-in-error
+        """
         status = api.get_review_status(self.context)
         mapping = dict(SPECIMEN_STATUSES)
         fhir_status = mapping.get(status)
