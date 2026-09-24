@@ -54,10 +54,8 @@ class AnalysisToObservation(object):
         if note:
             data["note"] = note
 
-        value = self.get_value()
-        data.update(value)
-
-        ref_range = self.get_reference_range(value)
+        data.update(self.get_value())
+        ref_range = self.get_reference_range()
         if ref_range:
             data["referenceRange"] = ref_range
 
@@ -133,9 +131,11 @@ class AnalysisToObservation(object):
             return []
 
         storage = fapi.get_fhir_storage(sample)
-        if not storage.get("uids"):
+        uids = storage.get("uids")
+        if not uids:
             return []
-        service_request_uid = storage.get("uids").get("ServiceRequest")
+
+        service_request_uid = uids.get("ServiceRequest")
         if not service_request_uid:
             return []
 
@@ -157,7 +157,7 @@ class AnalysisToObservation(object):
         }]
 
     def get_value(self):
-        if self.analysis.getStringResult() or self.analysis.getResultOptions():
+        if not self.is_quantitative():
             return {"valueString": self.analysis.getFormattedResult()}
 
         value_quantity = {
@@ -182,11 +182,15 @@ class AnalysisToObservation(object):
             "reference": "Device/{}".format(fapi.get_fhir_id(instrument)),
         }
 
-    def get_reference_range(self, value=None):
-        if value is None:
-            value = self.get_value()
+    def is_quantitative(self):
+        """Returns whether the result of the analysis is quantitative
+        """
+        result_type = self.analysis.getResultType()
+        return result_type == "numeric"
 
-        if not value.get("valueQuantity"):
+    def get_reference_range(self):
+        # In FHIR, range only makes sense when the result is quantitative
+        if not self.is_quantitative():
             return []
 
         rng = self.analysis.getResultsRange()
