@@ -58,7 +58,7 @@ Create the minimum set of objects needed to register a sample:
     ...                       title="CBC", Department=department)
     >>> Hb = api.create(portal.bika_setup.bika_analysisservices,
     ...                 "AnalysisService", title="Haemoglobin", Keyword="Hb",
-    ...                 Category=category.UID())
+    ...                 Category=category.UID(), Unit="10*3/uL")
     >>> profile = api.create(setup.analysisprofiles, "AnalysisProfile",
     ...                      title="CBC Panel", ProfileKey="cbc-panel")
     >>> profile.setServices([Hb.UID()])
@@ -84,6 +84,7 @@ Create and publish the sample
     True
     >>> analyses = sample.getAnalyses(full_objects=True)
     >>> for analysis in analyses:
+    ...     analysis.setResultsRange({"min": "4.5", "max": "11"})
     ...     analysis.setResult(14.5)
     ...     _ = do_action_for(analysis, "submit")
     ...     _ = do_action_for(analysis, "verify")
@@ -345,6 +346,27 @@ the sample – one Haemoglobin analysis was published:
     >>> include_entries[0]["resource"]["resourceType"]
     u'Observation'
 
+SENAITE's configured normal range is returned on the numeric Observation as
+plain low and high Quantities. It is supplied by the result workflow, not by
+an instrument:
+
+    >>> observation = include_entries[0]["resource"]
+    >>> observation["referenceRange"] == [{
+    ...     "low": {
+    ...         "value": "4.5",
+    ...         "unit": "10*3/uL",
+    ...         "system": "http://unitsofmeasure.org",
+    ...         "code": "10*3/uL",
+    ...     },
+    ...     "high": {
+    ...         "value": "11",
+    ...         "unit": "10*3/uL",
+    ...         "system": "http://unitsofmeasure.org",
+    ...         "code": "10*3/uL",
+    ...     },
+    ... }]
+    True
+
 Included Observations are appended after the ``DiagnosticReport`` matches,
 so ``Bundle.total`` keeps counting matches only:
 
@@ -474,3 +496,61 @@ The includes are exactly the reportable analyses of every matched sample:
 
     >>> len(included)
     2
+
+
+Reference ranges are numeric and may be open ended
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Only ``valueQuantity`` Observations carry a configured range. A zero lower
+bound is valid, and either bound may be omitted independently:
+
+    >>> haemoglobin = sample.getAnalyses(full_objects=True)[0]
+    >>> haemoglobin.setResultsRange({"min": "0", "max": ""})
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> observation["referenceRange"] == [{
+    ...     "low": {
+    ...         "value": "0",
+    ...         "unit": "10*3/uL",
+    ...         "system": "http://unitsofmeasure.org",
+    ...         "code": "10*3/uL",
+    ...     },
+    ... }]
+    True
+
+    >>> haemoglobin.setResultsRange({"min": "", "max": "11"})
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> observation["referenceRange"] == [{
+    ...     "high": {
+    ...         "value": "11",
+    ...         "unit": "10*3/uL",
+    ...         "system": "http://unitsofmeasure.org",
+    ...         "code": "10*3/uL",
+    ...     },
+    ... }]
+    True
+
+String results never carry a numeric reference range, even if an Analysis
+has a range configured. Nor is an empty configuration serialized:
+
+    >>> haemoglobin.setResultType("string")
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> "valueString" in observation
+    True
+    >>> "referenceRange" in observation
+    False
+
+Only numeric results are quantitative. A date result is not a string result
+either, but it is neither serialized as a Quantity nor given a range:
+
+    >>> haemoglobin.setResultType("date")
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> "valueQuantity" in observation
+    False
+    >>> "referenceRange" in observation
+    False
+
+    >>> haemoglobin.setResultType("numeric")
+    >>> haemoglobin.setResultsRange({})
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> "referenceRange" in observation
+    False

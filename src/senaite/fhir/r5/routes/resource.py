@@ -181,6 +181,10 @@ def post(context, request, resource_type=None):
         if resource.resourceType == "Observation" and obj:
             do_action_for(obj, "submit")
             obs = fapi.to_fhir_resource(obj, default=None)
+            # Reference ranges are SENAITE-owned metadata. They are returned
+            # to result consumers in the DiagnosticReport workflow, never in
+            # the instrument/middleware result-submission exchange
+            obs.pop("referenceRange", None)
             if resource.text:
                 obs["text"] = resource.text
             return obs
