@@ -539,6 +539,16 @@ has a range configured. Nor is an empty configuration serialized:
     >>> "referenceRange" in observation
     False
 
+Only numeric results are quantitative. A date result is not a string result
+either, but it is neither serialized as a Quantity nor given a range:
+
+    >>> haemoglobin.setResultType("date")
+    >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
+    >>> "valueQuantity" in observation
+    False
+    >>> "referenceRange" in observation
+    False
+
     >>> haemoglobin.setResultType("numeric")
     >>> haemoglobin.setResultsRange({})
     >>> observation = dict(fapi.to_fhir_resource(haemoglobin))
