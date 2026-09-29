@@ -12,6 +12,9 @@ A `Specimen` has no such counterpart -- `SampleType` only carries its type
 as **secondary**: `link_fhir_resource(obj, resource, secondary=True)`
 snapshots them in the type-keyed `resources` slot of the object's FHIR
 annotation storage, and `get_fhir_resource` serves them back from there.
+The only exception are the elements owned by SENAITE, that a consumer cannot
+supply or that SENAITE keeps up to date afterwards: these are always taken
+from the live content, overriding the snapshot.
 
 Because the two kinds are read back differently, a resource that *does* have a
 counterpart must never end up in the `resources` slot: a stale snapshot
@@ -22,7 +25,9 @@ This test covers:
 - `get_secondary_resources`, the hand-over that converters use to declare
   secondary resources for the object being created or updated;
 - the `Specimen` of a posted `ServiceRequest` being linked as secondary to
-  the created sample and served back verbatim;
+  the created sample and served back as it came in;
+- the elements owned by SENAITE (`get_server_owned_elements`) being taken
+  from the live sample on read, without altering the stored snapshot;
 - the sample's own `ServiceRequest` *not* being snapshotted as secondary;
 - secondary resources being re-linked when the resource is updated.
 
@@ -42,6 +47,7 @@ Needed imports:
     >>> from plone.app.testing import setRoles
     >>> from plone.app.testing import TEST_USER_ID
     >>> from bika.lims import api
+    >>> from bika.lims.workflow import doActionFor as do_action_for
     >>> from senaite.fhir import api as fapi
 
 Variables:
@@ -92,6 +98,9 @@ Load the bundle and keep its `Specimen` and `ServiceRequest` at hand:
 
     >>> posted_specimen = entry_of("Specimen")
     >>> posted_sr = entry_of("ServiceRequest")
+    >>> posted_client_sample_id = posted_specimen["identifier"][0]["value"]
+    >>> posted_client_sample_id
+    u'EXT-CARDIAC-002'
 
 
 get_secondary_resources
@@ -177,8 +186,8 @@ snapshot of it would shadow the live one:
 Reading back a secondary resource
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`get_fhir_resource` returns the Specimen exactly as it came in, with the id,
-the SNOMED type coding, the collection body site and the notes carried by the
+`get_fhir_resource` returns the Specimen as it came in, with the id, the
+SNOMED type coding, the collection body site and the notes carried by the
 bundle:
 
     >>> stored = fapi.get_fhir_resource(sample, "Specimen")
@@ -221,6 +230,115 @@ own FHIR id and through the `Specimen` listing:
     1
     >>> listing["entry"][0]["resource"]["id"] == posted_specimen["id"]
     True
+
+
+Elements owned by SENAITE are taken from the live content
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+`SERVER_OWNED_ELEMENTS` tells, for each secondary resource type, the elements
+that are owned by SENAITE. For a `Specimen`, these are the identifiers, that
+include the internal Sample ID, and the status:
+
+    >>> from senaite.fhir.config import SERVER_OWNED_ELEMENTS
+    >>> dict(SERVER_OWNED_ELEMENTS).get("Specimen")
+    ('identifier', 'status')
+
+`get_server_owned_elements` synthesizes these elements from the live sample,
+through the same `AnalysisRequestToSpecimen` adapter used for native samples:
+
+    >>> owned = fapi.get_server_owned_elements(sample, "Specimen")
+    >>> sorted(owned.keys())
+    ['identifier', 'status']
+    >>> owned["identifier"] == synthesized["identifier"]
+    True
+    >>> owned["status"]
+    'available'
+
+Nothing is returned for resource types without elements owned by SENAITE, or
+when the object cannot be represented as the given resource type:
+
+    >>> fapi.get_server_owned_elements(sample, "ServiceRequest")
+    {}
+    >>> fapi.get_server_owned_elements(client, "Specimen")
+    {}
+
+The consumer cannot supply the internal Sample ID, so the snapshot does not
+carry it. It carries the Client Sample ID only:
+
+    >>> def get_snapshot(sample):
+    ...     storage = fapi.get_fhir_storage(sample)
+    ...     return storage.get("resources").get("Specimen")
+
+    >>> def get_identifiers(resource):
+    ...     identifiers = resource.get("identifier") or []
+    ...     return [(i["use"], i["value"]) for i in identifiers]
+
+    >>> get_identifiers(get_snapshot(sample)) == [
+    ...     ("secondary", posted_client_sample_id)]
+    True
+    >>> "status" in get_snapshot(sample)
+    False
+
+But the Specimen read back carries both, and the status:
+
+    >>> stored = fapi.get_fhir_resource(sample, "Specimen")
+    >>> get_identifiers(stored) == [
+    ...     ("usual", sample.getId()),
+    ...     ("secondary", posted_client_sample_id)]
+    True
+    >>> stored["status"]
+    'available'
+
+The elements owned by SENAITE follow the live sample. The Client Sample ID
+can be edited in SENAITE after the order was received:
+
+    >>> sample.setClientSampleID("EXT-EDITED-001")
+    >>> stored = fapi.get_fhir_resource(sample, "Specimen")
+    >>> get_identifiers(stored) == [
+    ...     ("usual", sample.getId()),
+    ...     ("secondary", "EXT-EDITED-001")]
+    True
+
+And the status follows the status of the sample, as mapped in
+`SPECIMEN_STATUSES`:
+
+    >>> success = do_action_for(sample, "cancel")
+    >>> api.get_workflow_status_of(sample)
+    'cancelled'
+    >>> fapi.get_fhir_resource(sample, "Specimen")["status"]
+    'unavailable'
+
+    >>> success = do_action_for(sample, "reinstate")
+    >>> fapi.get_fhir_resource(sample, "Specimen")["status"]
+    'available'
+
+The rest of the snapshot is still served as it came in, and the snapshot
+itself is never altered by these reads:
+
+    >>> stored["collection"]["bodySite"]["concept"]["coding"][0]["display"]
+    u'Antecubital fossa'
+    >>> get_identifiers(get_snapshot(sample)) == [
+    ...     ("secondary", posted_client_sample_id)]
+    True
+    >>> "status" in get_snapshot(sample)
+    False
+
+The HTTP endpoint serves them as well:
+
+    >>> transaction.commit()
+    >>> browser.open("{}/Specimen/{}".format(fhir_url, stored.id))
+    >>> served = json.loads(browser.contents)
+    >>> get_identifiers(served) == [
+    ...     ("usual", sample.getId()),
+    ...     ("secondary", "EXT-EDITED-001")]
+    True
+    >>> served["status"]
+    u'available'
+
+Restore the Client Sample ID for the tests below:
+
+    >>> sample.setClientSampleID(posted_client_sample_id)
+    >>> transaction.commit()
 
 
 Secondary resources are re-linked on update
