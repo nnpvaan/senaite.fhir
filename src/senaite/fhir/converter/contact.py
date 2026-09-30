@@ -35,4 +35,17 @@ class ResourceToContact(ResourceToPerson):
             "portal_type": "Contact",
             "parent_path": api.get_path(parent),
         })
+
+        # only set the external id when the practitioner carries one, so an
+        # update without it does not wipe the one the contact already has
+        external_id = self.get_external_id()
+        if external_id:
+            data["fhir_external_id"] = external_id
+
         return data
+
+    def get_external_id(self):
+        """Return the identifier assigned by the FHIR API consumer
+        """
+        identifier = self.resource.get_external_id()
+        return identifier.value if identifier else None

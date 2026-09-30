@@ -211,6 +211,124 @@ after the POST -- so we read the stored field values directly:
     'm'
 
 
+External ID of the Contact
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The identifier assigned to the `Practitioner` by the API consumer's own
+system (`use=secondary`) is kept in the `fhir_external_id` field of the
+Contact, added by the `IExtendedContactBehavior` behavior:
+
+    >>> from senaite.fhir.behaviors.contact import IExtendedContactBehavior
+    >>> practitioner = [e["resource"] for e in bundle["entry"]
+    ...                 if e["resource"]["resourceType"] == "Practitioner"][0]
+    >>> external_id = practitioner["identifier"][0]
+    >>> external_id["use"]
+    u'secondary'
+    >>> external_id["value"]
+    u'PRACT-DR-SULLIVAN'
+
+    >>> contact.getFHIRExternalID()
+    'PRACT-DR-SULLIVAN'
+    >>> IExtendedContactBehavior(contact).fhir_external_id
+    'PRACT-DR-SULLIVAN'
+
+It is indexed in the contacts catalog, so the Contact can be searched by it:
+
+    >>> from senaite.core.catalog import CONTACT_CATALOG
+    >>> query = {"fhir_external_id": "PRACT-DR-SULLIVAN"}
+    >>> brains = api.search(query, CONTACT_CATALOG)
+    >>> [api.get_object(brain) for brain in brains] == [contact]
+    True
+
+
+Requester lookup
+~~~~~~~~~~~~~~~~
+
+The Contact of the Sample is the `requester` of the `ServiceRequest`. When
+that reference cannot be resolved by the FHIR id of the `Practitioner`, the
+Contact is searched within the Client, first by the external ID of the
+`Practitioner` and then by its full name.
+
+To exercise it, build a copy of the bundle where the `Practitioner` has a
+FHIR id not known by SENAITE, along with the given external ID and, optionally,
+a different family name:
+
+    >>> import copy
+    >>> from senaite.fhir.converter.analysisrequest import (
+    ...     ResourceToAnalysisRequest)
+    >>> unknown_id = "0f0f0f0f-1111-4222-8333-444455556666"
+
+    >>> def get_requester(external_id, family=None):
+    ...     data = copy.deepcopy(bundle)
+    ...     for entry in data["entry"]:
+    ...         resource = entry["resource"]
+    ...         if resource["resourceType"] == "Practitioner":
+    ...             resource["id"] = unknown_id
+    ...             resource["identifier"] = [{
+    ...                 "use": "secondary",
+    ...                 "value": external_id,
+    ...             }]
+    ...             if family:
+    ...                 for name in resource.get("name") or []:
+    ...                     name["family"] = family
+    ...         if resource["resourceType"] == "ServiceRequest":
+    ...             reference = "Practitioner/{}".format(unknown_id)
+    ...             resource["requester"]["reference"] = reference
+    ...             sr_id = resource["id"]
+    ...     data = fapi.to_fhir_resource(data)
+    ...     service_request = data.first_entry("id", sr_id)
+    ...     service_request["_bundle"] = data
+    ...     converter = ResourceToAnalysisRequest(service_request)
+    ...     return converter.get_requester()
+
+The FHIR id is not known by SENAITE:
+
+    >>> fapi.get_object(unknown_id, default=None) is None
+    True
+
+The Contact is found by its external ID, even if the name differs:
+
+    >>> get_requester("PRACT-DR-SULLIVAN", family="Nobody") == contact
+    True
+
+When no Contact has that external ID, the Contact is found by its full name:
+
+    >>> get_requester("PRACT-UNKNOWN") == contact
+    True
+
+When neither the external ID nor the full name match, no Contact is found:
+
+    >>> get_requester("PRACT-UNKNOWN", family="Nobody")
+    Traceback (most recent call last):
+    ...
+    ValueError: ... No Contact for ...
+
+The external ID of the Contacts from other Clients is not considered. Move
+the external ID to a Contact of another Client:
+
+    >>> other_client = api.create(portal.clients, "Client",
+    ...                           Name="Other Lab", ClientID="OTHER")
+    >>> other_contact = api.create(other_client, "Contact",
+    ...                            Firstname="Other", Surname="Contact")
+    >>> IExtendedContactBehavior(contact).fhir_external_id = None
+    >>> contact.reindexObject()
+    >>> IExtendedContactBehavior(other_contact).fhir_external_id = (
+    ...     u"PRACT-OTHER")
+    >>> other_contact.reindexObject()
+
+    >>> get_requester("PRACT-OTHER", family="Nobody")
+    Traceback (most recent call last):
+    ...
+    ValueError: ... No Contact for ...
+
+Restore the external ID of the Contact:
+
+    >>> IExtendedContactBehavior(contact).fhir_external_id = (
+    ...     u"PRACT-DR-SULLIVAN")
+    >>> contact.reindexObject()
+    >>> transaction.commit()
+
+
 Re-post the same Bundle (idempotent update)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -250,6 +368,87 @@ No duplicates are created -- it is still the same Sample, now ``stat``::
     True
     >>> samples[0].getPriority()
     '1'
+
+
+Practitioner matched by its external ID
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A repeat order may carry the same practitioner under a FHIR id that is not
+known by SENAITE. The `Practitioner` is then matched by its external ID to
+the existing Contact of the Client, instead of creating a duplicate.
+
+Only the Contacts of the Client are considered. Give a Contact of another
+Client the same external ID:
+
+    >>> another_client = api.create(portal.clients, "Client",
+    ...                             Name="Another Lab", ClientID="ANOTHER")
+    >>> another_contact = api.create(another_client, "Contact",
+    ...                              Firstname="Another", Surname="Contact")
+    >>> another_contact.setFHIRExternalID("PRACT-DR-SULLIVAN")
+    >>> another_contact.reindexObject()
+    >>> transaction.commit()
+
+Post the bundle with a `Practitioner` that has a FHIR id not known by SENAITE:
+
+    >>> repeat = json.loads(raw)
+    >>> practitioner_id = "0f0f0f0f-1111-4222-8333-444455556666"
+    >>> fapi.get_object(practitioner_id, default=None) is None
+    True
+
+    >>> for entry in repeat["entry"]:
+    ...     resource = entry["resource"]
+    ...     if resource["resourceType"] == "Practitioner":
+    ...         resource["id"] = practitioner_id
+    ...     if resource["resourceType"] == "ServiceRequest":
+    ...         reference = "Practitioner/{}".format(practitioner_id)
+    ...         resource["requester"]["reference"] = reference
+
+    >>> browser.post("{}/Bundle".format(fhir_url), json.dumps(repeat),
+    ...              content_type="application/json")
+    >>> response = json.loads(browser.contents)
+
+The `Practitioner` is reported as updated rather than created:
+
+    >>> [e["response"]["status"] for e in response["entry"]
+    ...  if e["fullUrl"].startswith("Practitioner/")]
+    [u'200 OK']
+
+No new Contact was created, and the existing one is now linked to the new
+FHIR id of the `Practitioner`:
+
+    >>> portal._p_jar.sync()
+    >>> contacts = [obj for obj in client.objectValues()
+    ...             if api.get_portal_type(obj) == "Contact"]
+    >>> contacts == [contact]
+    True
+    >>> fapi.get_fhir_id(contact, "Practitioner") == practitioner_id
+    True
+    >>> sample.getContact() == contact
+    True
+
+Nor was the Contact of the other Client modified:
+
+    >>> fapi.get_fhir_id(another_contact, "Practitioner") == practitioner_id
+    False
+
+Posting the `Practitioner` without its external ID does not wipe the one the
+Contact already has:
+
+    >>> for entry in repeat["entry"]:
+    ...     resource = entry["resource"]
+    ...     if resource["resourceType"] == "Practitioner":
+    ...         _ = resource.pop("identifier", None)
+
+    >>> browser.post("{}/Bundle".format(fhir_url), json.dumps(repeat),
+    ...              content_type="application/json")
+    >>> response = json.loads(browser.contents)
+    >>> [e["response"]["status"] for e in response["entry"]
+    ...  if e["fullUrl"].startswith("Practitioner/")]
+    [u'200 OK']
+
+    >>> portal._p_jar.sync()
+    >>> contact.getFHIRExternalID()
+    'PRACT-DR-SULLIVAN'
 
 
 Update a manually-created counterpart (matched by MRN)

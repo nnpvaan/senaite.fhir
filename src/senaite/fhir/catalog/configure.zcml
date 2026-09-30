@@ -2,5 +2,6 @@
 
   <adapter name="fhir_uids" factory=".indexer.fhir_uids" />
   <adapter name="fhir_resource_types" factory=".indexer.fhir_resource_types" />
+  <adapter name="fhir_external_id" factory=".indexer.fhir_external_id" />
 
 </configure>
