@@ -228,9 +228,9 @@ Contact, added by the `IExtendedContactBehavior` behavior:
     u'PRACT-DR-SULLIVAN'
 
     >>> contact.getFHIRExternalID()
-    u'PRACT-DR-SULLIVAN'
+    'PRACT-DR-SULLIVAN'
     >>> IExtendedContactBehavior(contact).fhir_external_id
-    u'PRACT-DR-SULLIVAN'
+    'PRACT-DR-SULLIVAN'
 
 It is indexed in the contacts catalog, so the Contact can be searched by it:
 
