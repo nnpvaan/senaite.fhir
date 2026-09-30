@@ -211,6 +211,37 @@ after the POST -- so we read the stored field values directly:
     'm'
 
 
+External ID of the Contact
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The identifier assigned to the `Practitioner` by the API consumer's own
+system (`use=secondary`) is kept in the `fhir_external_id` field of the
+Contact, added by the `IExtendedContactBehavior` behavior:
+
+    >>> from senaite.fhir.behaviors.contact import IExtendedContactBehavior
+    >>> from senaite.fhir.behaviors.contact import getFHIRExternalID
+    >>> practitioner = [e["resource"] for e in bundle["entry"]
+    ...                 if e["resource"]["resourceType"] == "Practitioner"][0]
+    >>> external_id = practitioner["identifier"][0]
+    >>> external_id["use"]
+    u'secondary'
+    >>> external_id["value"]
+    u'PRACT-DR-SULLIVAN'
+
+    >>> getFHIRExternalID(contact)
+    u'PRACT-DR-SULLIVAN'
+    >>> IExtendedContactBehavior(contact).fhir_external_id
+    u'PRACT-DR-SULLIVAN'
+
+It is indexed in the contacts catalog, so the Contact can be searched by it:
+
+    >>> from senaite.core.catalog import CONTACT_CATALOG
+    >>> query = {"fhir_external_id": "PRACT-DR-SULLIVAN"}
+    >>> brains = api.search(query, CONTACT_CATALOG)
+    >>> [api.get_object(brain) for brain in brains] == [contact]
+    True
+
+
 Re-post the same Bundle (idempotent update)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

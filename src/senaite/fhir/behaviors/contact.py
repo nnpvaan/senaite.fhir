@@ -5,8 +5,8 @@ from plone.autoform.interfaces import IFormFieldProvider
 from plone.supermodel import model
 from Products.CMFCore import permissions
 from senaite.core.interfaces import IContact
+from senaite.core.schema import TextLineField
 from senaite.fhir import _
-from zope import schema
 from zope.component import adapter
 from zope.interface import implementer
 from zope.interface import provider
@@ -15,7 +15,7 @@ from zope.interface import provider
 @provider(IFormFieldProvider)
 class IExtendedContactBehavior(model.Schema):
 
-    external_id = schema.TextLine(
+    fhir_external_id = TextLineField(
         title=_(u"External ID"),
         description=_(u""),
         required=False,
@@ -32,23 +32,23 @@ class ExtendedContact(object):
         self.context = context
 
     @security.protected(permissions.View)
-    def getExternalID(self):
-        accessor = self.context.accessor("external_id")
+    def getFHIRExternalID(self):
+        accessor = self.context.accessor("fhir_external_id")
         return accessor(self.context)
 
     @security.protected(permissions.ModifyPortalContent)
-    def setExternalID(self, value):
-        mutator = self.context.mutator("external_id")
+    def setFHIRExternalID(self, value):
+        mutator = self.context.mutator("fhir_external_id")
         mutator(self.context, value)
 
-    external_id = property(getExternalID, setExternalID)
+    fhir_external_id = property(getFHIRExternalID, setFHIRExternalID)
 
 
-def getExternalID(self):
+def getFHIRExternalID(self):
     behavior = IExtendedContactBehavior(self)
-    return behavior.getExternalID()
+    return behavior.getFHIRExternalID()
 
 
-def setExternalID(self, value):
+def setFHIRExternalID(self, value):
     behavior = IExtendedContactBehavior(self)
-    behavior.setExternalID(value)
+    behavior.setFHIRExternalID(value)

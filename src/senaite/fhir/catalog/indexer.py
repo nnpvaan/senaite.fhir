@@ -5,7 +5,7 @@ from plone.indexer import indexer
 from Products.CMFCore.interfaces import IContentish
 from senaite.core.interfaces import IContact
 from senaite.core.interfaces.catalog import IContactCatalog
-from senaite.fhir.behaviors.contact import getExternalID
+from senaite.fhir.behaviors.contact import getFHIRExternalID
 from senaite.fhir.interfaces import IFHIRCatalog
 from senaite.fhir import api as fapi
 
@@ -30,8 +30,8 @@ def fhir_resource_types(obj):
 
 
 @indexer(IContact, IContactCatalog)
-def contact_external_id(instance):
+def fhir_external_id(instance):
     """Indexes the external id assigned by the FHIR API consumer, so
     Practitioner resources can be matched to an existing Contact by it
     """
-    return getExternalID(instance) or ""
+    return getFHIRExternalID(instance) or ""

@@ -34,7 +34,7 @@ class ResourceToContact(ResourceToPerson):
         data.update({
             "portal_type": "Contact",
             "parent_path": api.get_path(parent),
-            "external_id": self.get_external_id(),
+            "fhir_external_id": self.get_external_id(),
         })
         return data
 
