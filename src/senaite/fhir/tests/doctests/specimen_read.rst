@@ -15,6 +15,7 @@ Also verifies:
 - Both the 36-char dashed UUID and the 32-char hex UID forms are accepted.
 - Requests for unknown UUIDs return a ``404``.
 - ARs without a ``SamplePoint`` produce a Specimen with no ``bodySite``.
+- The ``status`` is mapped from the status of the AR.
 
 Running this test from the buildout directory:
 
@@ -113,6 +114,12 @@ Specimen resource:
     u'Specimen'
     >>> spec["id"] == specimen_id
     True
+
+The ``status`` is mapped from the status of the AR. A sample that is due is
+available:
+
+    >>> spec["status"]
+    u'available'
 
 The ``type`` coding carries the SNOMED system code and the SampleType title:
 
