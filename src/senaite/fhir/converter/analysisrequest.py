@@ -351,19 +351,17 @@ class ResourceToAnalysisRequest(object):
         if not sibling:
             raise ValueError("%r: No Contact for %s" % (self.resource, uid))
 
-        # the contact must belong to the client the sample is registered for
+        # search the counterpart contact of the practitioner, by its external
+        # id (use=secondary) within the client (see ContactFinder). The finder
+        # resolves the client from the bundle the practitioner belongs to
+        sibling["_bundle"] = self.resource.get("_bundle")
+        contact = fapi.find_object_for(sibling, default=None)
+        if contact:
+            return contact
+
+        # fallback to search by fullname, within the client the sample is
+        # registered for
         client = self.get_client()
-
-        # TODO Consider to add a search function in fapi and use adapters
-        # search by the external id of the practitioner (use=secondary)
-        external_id = sibling.get_external_id()
-        eid = external_id.value if external_id else None
-        if eid:
-            contact = self.search_contact(client, fhir_external_id=eid)
-            if contact:
-                return contact
-
-        # fallback to search by fullname
         fullname = self.get_practitioner_fullname(sibling)
         if fullname:
             contact = self.search_contact(client, getFullname=fullname)
