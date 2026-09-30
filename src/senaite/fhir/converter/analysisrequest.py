@@ -8,6 +8,7 @@ from senaite.fhir.converter import to_fhir_datetime
 from senaite.fhir.converter import to_fhir_profile_url
 from senaite.fhir.converter import to_fhir_identifier as to_fhir_id
 from senaite.fhir.converter import to_naming_system_url
+from senaite.fhir.converter.person import ResourceToPerson
 from senaite.fhir.exceptions import ServiceRequestValidationError
 from senaite.fhir.interfaces import IContentActionToFHIR
 from senaite.fhir.interfaces import IContentToFHIR
@@ -348,37 +349,58 @@ class ResourceToAnalysisRequest(object):
         # get the sibling from the bundle, if any
         sibling = self.get_bundle_sibling(ref)
         if not sibling:
-            raise ValueError("%r: No Client for %s" % (self.resource, uid))
+            raise ValueError("%r: No Contact for %s" % (self.resource, uid))
+
+        # the contact must belong to the client the sample is registered for
+        client = self.get_client()
 
         # TODO Consider to add a search function in fapi and use adapters
-        # search by practitioner ID (use=secondary)
-        contact_id = sibling.get_external_id()
-        if contact_id:
-            # TODO New field External ID in contact to search by
-            query = dict(portal_type="Contact", getExternalID=contact_id)
-            # brains = api.search(query, CONTACT_CATALOG)
-            brains = []
-            if len(brains) == 1:
-                return api.get_object(brains[0])
+        # search by the external id of the practitioner (use=secondary)
+        external_id = sibling.get_external_id()
+        eid = external_id.value if external_id else None
+        if eid:
+            contact = self.search_contact(client, fhir_external_id=eid)
+            if contact:
+                return contact
 
-        # fallback to search by fullname (from the client)
-        client = self.get_client()
-        fullname = sibling.get_fullname()
-        if client and fullname:
-            fullname = sibling.get_fullname()
-            query = {
-                "portal_type": "Contact",
-                "getFullname": fullname,
-                "path": {
-                    "query": "/".join(client.getPhysicalPath()),
-                    "level": 0
-                }
-            }
-            brains = api.search(query, CONTACT_CATALOG)
-            if len(brains) == 1:
-                return api.get_object(brains[0])
+        # fallback to search by fullname
+        fullname = self.get_practitioner_fullname(sibling)
+        if fullname:
+            contact = self.search_contact(client, getFullname=fullname)
+            if contact:
+                return contact
 
         raise ValueError("%r: No Contact for %s" % (self.resource, uid))
+
+    def get_practitioner_fullname(self, practitioner):
+        """Returns the fullname of the practitioner, built the same way the
+        fullname of a Contact is (see `Person.getFullname`), or None
+        """
+        if not practitioner.name:
+            return None
+        person = ResourceToPerson(practitioner)
+        names = [
+            person.get_firstname(),
+            person.get_middlename(),
+            person.get_lastname(),
+        ]
+        return " ".join(filter(None, names))
+
+    def search_contact(self, client, **query):
+        """Returns the contact from the given client that matches the query,
+        or None if no contact, or more than one, matches
+        """
+        query.update({
+            "portal_type": "Contact",
+            "path": {
+                "query": api.get_path(client),
+                "level": 0,
+            },
+        })
+        brains = api.search(query, CONTACT_CATALOG)
+        if len(brains) == 1:
+            return api.get_object(brains[0])
+        return None
 
     @memoize
     def get_patient(self):

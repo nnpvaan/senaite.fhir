@@ -241,6 +241,94 @@ It is indexed in the contacts catalog, so the Contact can be searched by it:
     True
 
 
+Requester lookup
+~~~~~~~~~~~~~~~~
+
+The Contact of the Sample is the `requester` of the `ServiceRequest`. When
+that reference cannot be resolved by the FHIR id of the `Practitioner`, the
+Contact is searched within the Client, first by the external ID of the
+`Practitioner` and then by its full name.
+
+To exercise it, build a copy of the bundle where the `Practitioner` has a
+FHIR id not known by SENAITE, along with the given external ID and, optionally,
+a different family name:
+
+    >>> import copy
+    >>> from senaite.fhir.converter.analysisrequest import (
+    ...     ResourceToAnalysisRequest)
+    >>> unknown_id = "0f0f0f0f-1111-4222-8333-444455556666"
+
+    >>> def get_requester(external_id, family=None):
+    ...     data = copy.deepcopy(bundle)
+    ...     for entry in data["entry"]:
+    ...         resource = entry["resource"]
+    ...         if resource["resourceType"] == "Practitioner":
+    ...             resource["id"] = unknown_id
+    ...             resource["identifier"] = [{
+    ...                 "use": "secondary",
+    ...                 "value": external_id,
+    ...             }]
+    ...             if family:
+    ...                 for name in resource.get("name") or []:
+    ...                     name["family"] = family
+    ...         if resource["resourceType"] == "ServiceRequest":
+    ...             reference = "Practitioner/{}".format(unknown_id)
+    ...             resource["requester"]["reference"] = reference
+    ...             sr_id = resource["id"]
+    ...     data = fapi.to_fhir_resource(data)
+    ...     service_request = data.first_entry("id", sr_id)
+    ...     service_request["_bundle"] = data
+    ...     converter = ResourceToAnalysisRequest(service_request)
+    ...     return converter.get_requester()
+
+The FHIR id is not known by SENAITE:
+
+    >>> fapi.get_object(unknown_id, default=None) is None
+    True
+
+The Contact is found by its external ID, even if the name differs:
+
+    >>> get_requester("PRACT-DR-SULLIVAN", family="Nobody") == contact
+    True
+
+When no Contact has that external ID, the Contact is found by its full name:
+
+    >>> get_requester("PRACT-UNKNOWN") == contact
+    True
+
+When neither the external ID nor the full name match, no Contact is found:
+
+    >>> get_requester("PRACT-UNKNOWN", family="Nobody")
+    Traceback (most recent call last):
+    ...
+    ValueError: ... No Contact for ...
+
+The external ID of the Contacts from other Clients is not considered. Move
+the external ID to a Contact of another Client:
+
+    >>> other_client = api.create(portal.clients, "Client",
+    ...                           Name="Other Lab", ClientID="OTHER")
+    >>> other_contact = api.create(other_client, "Contact",
+    ...                            Firstname="Other", Surname="Contact")
+    >>> IExtendedContactBehavior(contact).fhir_external_id = None
+    >>> contact.reindexObject()
+    >>> IExtendedContactBehavior(other_contact).fhir_external_id = (
+    ...     u"PRACT-OTHER")
+    >>> other_contact.reindexObject()
+
+    >>> get_requester("PRACT-OTHER", family="Nobody")
+    Traceback (most recent call last):
+    ...
+    ValueError: ... No Contact for ...
+
+Restore the external ID of the Contact:
+
+    >>> IExtendedContactBehavior(contact).fhir_external_id = (
+    ...     u"PRACT-DR-SULLIVAN")
+    >>> contact.reindexObject()
+    >>> transaction.commit()
+
+
 Re-post the same Bundle (idempotent update)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
