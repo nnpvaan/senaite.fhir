@@ -219,7 +219,6 @@ system (`use=secondary`) is kept in the `fhir_external_id` field of the
 Contact, added by the `IExtendedContactBehavior` behavior:
 
     >>> from senaite.fhir.behaviors.contact import IExtendedContactBehavior
-    >>> from senaite.fhir.behaviors.contact import getFHIRExternalID
     >>> practitioner = [e["resource"] for e in bundle["entry"]
     ...                 if e["resource"]["resourceType"] == "Practitioner"][0]
     >>> external_id = practitioner["identifier"][0]
@@ -228,7 +227,7 @@ Contact, added by the `IExtendedContactBehavior` behavior:
     >>> external_id["value"]
     u'PRACT-DR-SULLIVAN'
 
-    >>> getFHIRExternalID(contact)
+    >>> contact.getFHIRExternalID()
     u'PRACT-DR-SULLIVAN'
     >>> IExtendedContactBehavior(contact).fhir_external_id
     u'PRACT-DR-SULLIVAN'

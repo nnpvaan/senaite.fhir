@@ -1,7 +1,7 @@
 <configure
     xmlns="http://namespaces.zope.org/zope"
     xmlns:plone="http://namespaces.plone.org/plone"
-    i18n_domain="senaite.fhir">
+    xmlns:monkey="http://namespaces.plone.org/monkey">
 
   <include package="plone.behavior" file="meta.zcml"/>
 
@@ -12,5 +12,17 @@
       provides=".contact.IExtendedContactBehavior"
       factory=".contact.ExtendedContact"
       for="senaite.core.interfaces.IContact" />
+
+  <monkey:patch
+      class="senaite.core.content.contact.Contact"
+      original="getFHIRExternalID"
+      ignoreOriginal="True"
+      replacement=".contact.getFHIRExternalID"/>
+
+  <monkey:patch
+      class="senaite.core.content.contact.Contact"
+      original="setFHIRExternalID"
+      ignoreOriginal="True"
+      replacement=".contact.setFHIRExternalID"/>
 
 </configure>
