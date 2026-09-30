@@ -127,6 +127,10 @@ def remove_behaviors(portal):
     pt = api.get_tool("portal_types")
     for portal_type, behavior_ids in BEHAVIORS:
         fti = pt.get(portal_type)
+        if not hasattr(fti, "behaviors"):
+            # Skip, type is not registered or not a dexterity type
+            logger.warn("Behaviors is missing: {} [SKIP]".format(portal_type))
+            continue
         orig_behaviors = filter(lambda b: b not in behavior_ids, fti.behaviors)
         fti.behaviors = tuple(orig_behaviors)
 

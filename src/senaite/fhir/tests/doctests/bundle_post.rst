@@ -282,6 +282,87 @@ No duplicates are created -- it is still the same Sample, now ``stat``::
     '1'
 
 
+Practitioner matched by its external ID
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A repeat order may carry the same practitioner under a FHIR id that is not
+known by SENAITE. The `Practitioner` is then matched by its external ID to
+the existing Contact of the Client, instead of creating a duplicate.
+
+Only the Contacts of the Client are considered. Give a Contact of another
+Client the same external ID:
+
+    >>> another_client = api.create(portal.clients, "Client",
+    ...                             Name="Another Lab", ClientID="ANOTHER")
+    >>> another_contact = api.create(another_client, "Contact",
+    ...                              Firstname="Another", Surname="Contact")
+    >>> another_contact.setFHIRExternalID("PRACT-DR-SULLIVAN")
+    >>> another_contact.reindexObject()
+    >>> transaction.commit()
+
+Post the bundle with a `Practitioner` that has a FHIR id not known by SENAITE:
+
+    >>> repeat = json.loads(raw)
+    >>> practitioner_id = "0f0f0f0f-1111-4222-8333-444455556666"
+    >>> fapi.get_object(practitioner_id, default=None) is None
+    True
+
+    >>> for entry in repeat["entry"]:
+    ...     resource = entry["resource"]
+    ...     if resource["resourceType"] == "Practitioner":
+    ...         resource["id"] = practitioner_id
+    ...     if resource["resourceType"] == "ServiceRequest":
+    ...         reference = "Practitioner/{}".format(practitioner_id)
+    ...         resource["requester"]["reference"] = reference
+
+    >>> browser.post("{}/Bundle".format(fhir_url), json.dumps(repeat),
+    ...              content_type="application/json")
+    >>> response = json.loads(browser.contents)
+
+The `Practitioner` is reported as updated rather than created:
+
+    >>> [e["response"]["status"] for e in response["entry"]
+    ...  if e["fullUrl"].startswith("Practitioner/")]
+    [u'200 OK']
+
+No new Contact was created, and the existing one is now linked to the new
+FHIR id of the `Practitioner`:
+
+    >>> portal._p_jar.sync()
+    >>> contacts = [obj for obj in client.objectValues()
+    ...             if api.get_portal_type(obj) == "Contact"]
+    >>> contacts == [contact]
+    True
+    >>> fapi.get_fhir_id(contact, "Practitioner") == practitioner_id
+    True
+    >>> sample.getContact() == contact
+    True
+
+Nor was the Contact of the other Client modified:
+
+    >>> fapi.get_fhir_id(another_contact, "Practitioner") == practitioner_id
+    False
+
+Posting the `Practitioner` without its external ID does not wipe the one the
+Contact already has:
+
+    >>> for entry in repeat["entry"]:
+    ...     resource = entry["resource"]
+    ...     if resource["resourceType"] == "Practitioner":
+    ...         _ = resource.pop("identifier", None)
+
+    >>> browser.post("{}/Bundle".format(fhir_url), json.dumps(repeat),
+    ...              content_type="application/json")
+    >>> response = json.loads(browser.contents)
+    >>> [e["response"]["status"] for e in response["entry"]
+    ...  if e["fullUrl"].startswith("Practitioner/")]
+    [u'200 OK']
+
+    >>> portal._p_jar.sync()
+    >>> contact.getFHIRExternalID()
+    'PRACT-DR-SULLIVAN'
+
+
 Update a manually-created counterpart (matched by MRN)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

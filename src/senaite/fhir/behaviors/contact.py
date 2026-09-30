@@ -17,7 +17,10 @@ class IExtendedContactBehavior(model.Schema):
 
     fhir_external_id = TextLineField(
         title=_(u"External ID"),
-        description=_(u""),
+        description=_(
+            u"Identifier assigned to this contact by the system of the "
+            u"FHIR API consumer"
+        ),
         required=False,
     )
 

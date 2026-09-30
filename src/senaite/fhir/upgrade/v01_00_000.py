@@ -7,7 +7,8 @@ from senaite.fhir.setuphandlers import setup_catalogs
 
 
 def setup_contact_behavior(tool):
-    """Add patient behavior
+    """Add the behavior that extends Contact with the FHIR external ID,
+    along with the catalog index to search contacts by it
     """
     logger.info("Setup Contact behavior ...")
     portal = api.get_portal()
